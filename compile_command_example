@@ -1,0 +1,1 @@
+pyinstaller --onefile --windowed --add-data "volume_config.json;." source_code.py

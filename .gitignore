@@ -1,5 +1,5 @@
-/volume_config.json
+source_code.spec
 /build/
 /dist/
 /__pycache__/
-/volume_config copy.json
+/tests/
