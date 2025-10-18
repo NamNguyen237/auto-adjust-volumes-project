@@ -1,1 +1,3 @@
-pyinstaller --onefile --windowed --add-data "volume_config.json;." source_code.py
+pyinstaller --onefile --windowed --hidden-import=plyer.platforms.win.notification --icon=icon.ico VolumeSetter.py
+
+pyinstaller --onefile --windowed --icon=icon.ico --add-data="volume_config.json;." VolumeSetter.py

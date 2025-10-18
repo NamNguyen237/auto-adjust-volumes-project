@@ -3,3 +3,4 @@ source_code.spec
 /dist/
 /__pycache__/
 /tests/
+/output/

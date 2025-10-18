@@ -1,8 +1,6 @@
-// below are examples of volume settings for different audio devices
-
 {
     "Speakers / Headphones (Realtek Audio)": {
-        "default": 0.3
+        "default": 0.5
     },
     "Headphones (BLS-B21 Stereo)": {
         "default": 0.5
