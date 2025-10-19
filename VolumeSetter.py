@@ -48,9 +48,117 @@ def setup_logger():
 
     logging.debug("Logger theo ngày đã được khởi tạo")
 
+#kiểm tra môi trường
+#logger riêng diagnostic.log
+def setup_diagnostic_logger():
+    log_dir = os.path.join(os.getenv("APPDATA"), "VolumeSetter", "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, "diagnostic.log")
 
+    handler = TimedRotatingFileHandler(
+        filename=log_path,
+        when="midnight",
+        interval=1,
+        backupCount=7,
+        encoding="utf-8"
+    )
 
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    handler.setFormatter(formatter)
 
+    diag_logger = logging.getLogger("diagnostic")
+    diag_logger.setLevel(logging.DEBUG)
+    diag_logger.addHandler(handler)
+
+    return diag_logger
+
+#hàm kiểm tra môi trường
+import subprocess
+import winreg
+from pycaw.pycaw import AudioUtilities
+
+def check_windows_audio_service(logger):
+    try:
+        result = subprocess.run(["sc", "query", "Audiosrv"], capture_output=True, text=True)
+        if "RUNNING" in result.stdout:
+            logger.info("✅ Dịch vụ Windows Audio đang chạy")
+            return True
+        else:
+            logger.warning("❌ Dịch vụ Windows Audio không chạy hoặc bị tắt")
+            return False
+    except Exception as e:
+        logger.error(f"Lỗi khi kiểm tra dịch vụ Windows Audio: {e}")
+        return False
+
+def check_policy_config_registry(logger):
+    try:
+        key_path = r"CLSID\{870af99c-171d-4f9e-af0d-e63df40c2bc9}"
+        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, key_path):
+            logger.info("✅ COM PolicyConfig tồn tại trong registry")
+            return True
+    except FileNotFoundError:
+        logger.warning("❌ COM PolicyConfig không tồn tại trong registry")
+        return False
+    except Exception as e:
+        logger.error(f"Lỗi khi kiểm tra registry PolicyConfig: {e}")
+        return False
+
+def check_audio_devices_access(logger):
+    try:
+        devices = AudioUtilities.GetAllDevices()
+        if devices:
+            logger.info(f"✅ Truy cập danh sách thiết bị âm thanh thành công ({len(devices)} thiết bị)")
+            return True
+        else:
+            logger.warning("❌ Không tìm thấy thiết bị âm thanh nào")
+            return False
+    except Exception as e:
+        logger.error(f"Lỗi khi truy cập thiết bị âm thanh: {e}")
+        return False
+    
+def run_environment_check(diag_logger):
+    diag_logger.info("🔍 Bắt đầu kiểm tra môi trường hệ thống...")
+
+    ok_audio = check_windows_audio_service(diag_logger)
+    ok_registry = check_policy_config_registry(diag_logger)
+    ok_devices = check_audio_devices_access(diag_logger)
+
+    if not all([ok_audio, ok_registry, ok_devices]):
+        diag_logger.warning("⚠️ Môi trường không đầy đủ. Một số chức năng có thể không hoạt động đúng.")
+        messagebox.showwarning("Cảnh báo môi trường", "Phát hiện thiếu thành phần hệ thống. Một số chức năng có thể không hoạt động đúng.")
+    else:
+        diag_logger.info("✅ Môi trường đầy đủ. Sẵn sàng chạy ứng dụng.")
+    show_diagnostic_log()
+
+#check phần mềm chạy lần đầu
+def is_first_run():
+    flag_path = os.path.join(os.getenv("APPDATA"), "VolumeSetter", "first_run.flag")
+    if not os.path.exists(flag_path):
+        with open(flag_path, "w") as f:
+            f.write("checked")
+        return True
+    return False
+
+#show kết quả khi ấn nút kiểm tra môi trường
+def show_diagnostic_log():
+    log_path = os.path.join(os.getenv("APPDATA"), "VolumeSetter", "logs", "diagnostic.log")
+    if not os.path.exists(log_path):
+        log_text.delete(1.0, tk.END)
+        log_text.insert(tk.END, "Không tìm thấy file diagnostic.log")
+        return
+
+    log_text.delete(1.0, tk.END)
+
+    with open(log_path, "r", encoding="utf-8") as f:
+        for line in f:
+            if "INFO" in line:
+                log_text.insert(tk.END, line, "INFO")
+            elif "WARNING" in line:
+                log_text.insert(tk.END, line, "WARNING")
+            elif "ERROR" in line:
+                log_text.insert(tk.END, line, "ERROR")
+            else:
+                log_text.insert(tk.END, line)
 
 CONFIG_FILE = "volume_config.json"
 
@@ -388,10 +496,14 @@ def open_help_link():
 def open_github_link():
     webbrowser.open("https://github.com/NamNguyen237/auto-adjust-volumes-project")
 
+
+
 # === Giao diện người dùng ===
+
+
 root = tk.Tk()
 root.title("Trình điều chỉnh âm lượng mặc định (Bản thử nghiệm)")
-root.geometry("500x500")
+root.geometry("500x700")
 # Ghi đè hành vi khi nhấn nút ❌
 def on_close():
     root.withdraw()
@@ -441,6 +553,30 @@ tk.Button(root, text="Trợ giúp", command=open_help_link).pack(pady=5)
 # Trạng thái
 status_label = tk.Label(main_frame, text="", fg="blue", font=("Arial", 8))
 status_label.pack(pady=5)
+
+#Nút kiểm tra môi trường
+diag_logger = setup_diagnostic_logger()
+
+def manual_check_environment():
+    run_environment_check(diag_logger)
+
+check_button = ttk.Button(root, text="Kiểm tra môi trường", command=manual_check_environment)
+check_button.pack(pady=10)
+
+# Tạo Frame hiển thị log
+log_frame = ttk.LabelFrame(root, text="Kết quả kiểm tra môi trường")
+log_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+# Text widget để hiển thị nội dung log
+log_text = tk.Text(log_frame, wrap="word", height=15)
+log_text.pack(fill="both", expand=True)
+log_text.tag_config("INFO", foreground="green")
+log_text.tag_config("WARNING", foreground="orange")
+log_text.tag_config("ERROR", foreground="red")
+
+# Nút để tải lại log
+reload_button = ttk.Button(log_frame, text="Tải lại kết quả", command=show_diagnostic_log)
+reload_button.pack(pady=5)
 
 #About
 def show_about_window():
@@ -535,4 +671,7 @@ show_about_window()
 hide_window()         # Ẩn cửa sổ chính
 setup_tray()          # Tạo icon ở system tray
 setup_logger()        # Thiết lập logger
+if is_first_run():
+    run_environment_check(diag_logger)  # Kiểm tra môi trường khi chạy lần đầu
+    show_diagnostic_log()
 root.mainloop()       # Vẫn cần vòng lặp chính để giữ chương trình chạy
