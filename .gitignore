@@ -4,3 +4,5 @@ source_code.spec
 /__pycache__/
 /tests/
 /output/
+VolumeSetter.spec
+packaging_installer.iss
